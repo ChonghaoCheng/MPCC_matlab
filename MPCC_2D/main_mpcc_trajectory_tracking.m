@@ -31,7 +31,7 @@ Rmpc_du = diag([1e-3, 1e-3]);
 rng(1);
 
 %% 噪声参数
-enable_noise = true;      % 是否启用噪声
+enable_noise = false;      % 是否启用噪声
 noise_type = 'gaussian';  % 'gaussian', 'uniform'
 noise_std = 0.15;          % 高斯噪声标准差 [m]
 noise_uniform_range = 0.15; % 均匀噪声范围 [m]

@@ -1,37 +1,46 @@
 function [r_noisy, r1_noisy, r2_noisy] = add_trajectory_noise_3d(r, r1, r2, noise_type, noise_params, S_end)
-% ADD_TRAJECTORY_NOISE_3D Add spatial noise to a 3D reference path r(s)
-% Inputs:
-%   r, r1, r2: original trajectory function handles (R^3)
-%   noise_type: 'gaussian' | 'uniform' | 'uniform_time' | 'uniform_arc' | 'none'
-%   noise_params: struct with fields depending on type
-%       gaussian: .std (meters)
-%       uniform:  .range (meters)
-%   S_end: total arc length
-% Outputs:
-%   r_noisy, r1_noisy, r2_noisy: noisy trajectory and derivatives
+% ADD_TRAJECTORY_NOISE_3D 为3D参考路径添加空间噪声
+%
+% 输入:
+%   r, r1, r2: 原始轨迹函数句柄 (R^3)
+%   noise_type: 'gaussian' | 'rotation_only' | 'translation_only' | 'none'
+%   noise_params: 结构体，包含噪声参数
+%       gaussian:        .std (米) - 高斯噪声标准差
+%       rotation_only:   .sdot_nom (m/s), .period_sec, .rot_deg
+%       translation_only: .sdot_nom (m/s), .period_sec, .trans_amp, .trans_dir
+%   S_end: 总弧长
+%
+% 输出:
+%   r_noisy, r1_noisy, r2_noisy: 带噪声的轨迹及其导数
 
 switch lower(noise_type)
     case 'gaussian'
+        % Gaussian spatial noise
+        if ~isfield(noise_params,'std')
+            error('gaussian noise requires noise_params.std');
+        end
+        
         ss = linspace(0, S_end, 1000);
         nx = noise_params.std * randn(1, numel(ss));
         ny = noise_params.std * randn(1, numel(ss));
         nz = noise_params.std * randn(1, numel(ss));
 
-        % Smooth to keep derivatives well-behaved
         win = 50;
         nx_s = smoothdata(nx, 'gaussian', win);
         ny_s = smoothdata(ny, 'gaussian', win);
         nz_s = smoothdata(nz, 'gaussian', win);
 
-        % Position noise via interpolation
         r_noisy = @(s) r(s) + [
             interp1(ss, nx_s, s, 'pchip', 'extrap');
             interp1(ss, ny_s, s, 'pchip', 'extrap');
             interp1(ss, nz_s, s, 'pchip', 'extrap')];
 
-        % Derivative noise from spatial gradient wrt s (reduced gain)
-        dnx = gradient(nx_s, ss); dny = gradient(ny_s, ss); dnz = gradient(nz_s, ss);
-        ddnx = gradient(dnx, ss); ddny = gradient(dny, ss); ddnz = gradient(dnz, ss);
+        dnx = gradient(nx_s, ss); 
+        dny = gradient(ny_s, ss); 
+        dnz = gradient(nz_s, ss);
+        ddnx = gradient(dnx, ss); 
+        ddny = gradient(dny, ss); 
+        ddnz = gradient(dnz, ss);
 
         r1_noisy = @(s) r1(s) + 0.1 * [
             interp1(ss, dnx, s, 'pchip', 'extrap');
@@ -43,40 +52,71 @@ switch lower(noise_type)
             interp1(ss, ddny, s, 'pchip', 'extrap');
             interp1(ss, ddnz, s, 'pchip', 'extrap')];
 
-    case 'uniform'
-        ss = linspace(0, S_end, 1000);
-        nx = noise_params.range * (2*rand(1, numel(ss)) - 1);
-        ny = noise_params.range * (2*rand(1, numel(ss)) - 1);
-        nz = noise_params.range * (2*rand(1, numel(ss)) - 1);
-
-        r_noisy = @(s) r(s) + [
-            interp1(ss, nx, s, 'linear', 'extrap');
-            interp1(ss, ny, s, 'linear', 'extrap');
-            interp1(ss, nz, s, 'linear', 'extrap')];
-
-        % Light derivative noise
-        rnd1 = @(N) 2*rand(1,N)-1;
-        r1_noisy = @(s) r1(s) + noise_params.range * 0.05 * [
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap');
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap');
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap')];
-        r2_noisy = @(s) r2(s) + noise_params.range * 0.01 * [
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap');
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap');
-            interp1(ss, rnd1(numel(ss)), s, 'linear', 'extrap')];
-
-    case 'uniform_time'
-        % Time-triggered piecewise rigid perturbations every period_sec
-        % Params: .sdot_nom (m/s), .period_sec, .rot_deg, .trans_amp
+    case 'rotation_only'
+        % Rotation-only: 时间触发的分段旋转（绕z轴）
         if ~isfield(noise_params,'sdot_nom'),   noise_params.sdot_nom = 1.0; end
         if ~isfield(noise_params,'period_sec'), noise_params.period_sec = 10.0; end
-        if ~isfield(noise_params,'rot_deg'),    noise_params.rot_deg = 0; end   % about z-axis
-        if ~isfield(noise_params,'trans_amp'),  noise_params.trans_amp = 0.2; end % meters
+        if ~isfield(noise_params,'rot_deg'),    noise_params.rot_deg = 5.0; end
 
         sdot_nom = noise_params.sdot_nom;
         Tper = noise_params.period_sec;
         rot_rad = noise_params.rot_deg * pi/180;
+
+        % 直接在匿名函数内部计算所有逻辑
+        r_noisy = @(s) apply_rotation_z(r(s), s, sdot_nom, Tper, rot_rad);
+        r1_noisy = @(s) apply_rotation_z(r1(s), s, sdot_nom, Tper, rot_rad);
+        r2_noisy = @(s) apply_rotation_z(r2(s), s, sdot_nom, Tper, rot_rad);
+
+    case 'translation_only'
+        % Translation-only: 时间触发的分段平移
+        if ~isfield(noise_params,'sdot_nom'),   noise_params.sdot_nom = 1.0; end
+        if ~isfield(noise_params,'period_sec'), noise_params.period_sec = 10.0; end
+        if ~isfield(noise_params,'trans_amp'),  noise_params.trans_amp = 0.2; end
+        if ~isfield(noise_params,'trans_dir'),  noise_params.trans_dir = [1; 0; 0]; end
+
+        sdot_nom = noise_params.sdot_nom;
+        Tper = noise_params.period_sec;
         Atrans = noise_params.trans_amp;
+        trans_dir = noise_params.trans_dir / max(norm(noise_params.trans_dir), eps);
+
+        % 直接在匿名函数内部计算所有逻辑
+        r_noisy = @(s) apply_translation(r(s), s, sdot_nom, Tper, Atrans, trans_dir);
+        r1_noisy = @(s) r1(s);  % 平移不改变导数
+        r2_noisy = @(s) r2(s);  % 平移不改变导数
+
+    case 'none'
+        r_noisy = r; 
+        r1_noisy = r1; 
+        r2_noisy = r2;
+
+    otherwise
+        error('Unknown noise type: %s. Use ''gaussian'', ''rotation_only'', ''translation_only'', or ''none''', noise_type);
+end
+
+end
+
+% Helper functions (defined at file level, not nested)
+function p_out = apply_rotation_z(p_in, s, sdot_nom, Tper, rot_rad)
+    % 计算当前时间窗口索引
+    t = s / max(sdot_nom, 1e-9);
+    k = floor(t / Tper);
+    % 根据窗口索引计算旋转角度
+    theta = rot_rad * sin(12.9898*k + 0.5);
+    % 构建绕z轴旋转矩阵
+    Rz = [cos(theta) -sin(theta) 0; sin(theta) cos(theta) 0; 0 0 1];
+    % 应用旋转
+    p_out = Rz * p_in;
+end
+
+function p_out = apply_translation(p_in, s, sdot_nom, Tper, Atrans, trans_dir)
+    % 计算当前时间窗口索引
+    t = s / max(sdot_nom, 1e-9);
+    k = floor(t / Tper);
+    % 交替符号：+1, -1, +1, -1, ...
+    sign_k = (-1)^k;
+    % 计算平移向量并应用
+    p_out = p_in + Atrans * trans_dir * sign_k;
+end
 
         % Deterministic pseudo-random transform per time window index k
         angle_k = @(k) rot_rad * sin(12.9898*k + 0.5);

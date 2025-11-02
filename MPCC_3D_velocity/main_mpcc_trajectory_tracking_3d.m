@@ -25,7 +25,7 @@ Rmpc = diag([1e-3,1e-3,1e-3, 1e-3,1e-3,1e-3]);
 [r_ideal, r1_ideal, r2_ideal, S_end] = trajectory_functions_3d(traj_type);
 
 %% Noise settings 
-enable_noise = true;           % toggle noise on/off
+enable_noise = false;           % toggle noise on/off
 noise_type = 'uniform_arc';        % 'gaussian' | 'uniform_time' | 'uniform_arc'
 noise_std = 0.1;               % gaussian std [m]
 noise_uniform_range = 0.1;     % uniform range [m]

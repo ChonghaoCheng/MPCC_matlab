@@ -18,10 +18,29 @@ if nargin < 16 || isempty(v_plan)
 else
     vs_nom = min(v_progress_max, max(0, v_plan));
 end
-for k = 1:N
-    % set linear and angular velocities to zero nominally
-    ubar(:,k) = [0;0;0; 0;0;0; vs_nom];
-    xbar(:,k+1) = mpcc_dynamics_3d(xbar(:,k), ubar(:,k), dt);
+
+% Use last control input for nominal trajectory to match initial conditions
+% This ensures nominal trajectory starts from actual initial velocity
+% IMPORTANT: xbar(:,1) = x0 should already match current state perfectly
+if nargin >= 11 && ~isempty(u_last) && norm(u_last(1:6)) > 1e-6
+    % Use provided initial control for first step to align with current state
+    ubar(:,1) = u_last;
+    xbar(:,2) = mpcc_dynamics_3d(xbar(:,1), ubar(:,1), dt);
+    % For remaining steps, maintain velocity direction but scale down to zero gradually
+    % This provides a smoother nominal trajectory
+    for k = 2:N
+        % Gradually reduce linear/angular velocities, keep progress speed
+        alpha = max(0, 1 - (k-1)/N);  % Decay factor
+        ubar(:,k) = [alpha*u_last(1); alpha*u_last(2); alpha*u_last(3); ...
+                     alpha*u_last(4); alpha*u_last(5); alpha*u_last(6); vs_nom];
+        xbar(:,k+1) = mpcc_dynamics_3d(xbar(:,k), ubar(:,k), dt);
+    end
+else
+    % Fallback: use zero velocities if no initial control provided
+    for k = 1:N
+        ubar(:,k) = [0;0;0; 0;0;0; vs_nom];
+        xbar(:,k+1) = mpcc_dynamics_3d(xbar(:,k), ubar(:,k), dt);
+    end
 end
 
 % Linearization

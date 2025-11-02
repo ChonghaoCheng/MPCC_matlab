@@ -7,7 +7,7 @@ function [u_opt, ds_opt, xpred] = solve_mpcc_3d(x0, s0, N, dt, r, r1, r2, ...
 nx = 7; nu = 7;
 
 % Nominal progress rollout (fallback ds if solver fails)
-ds_guess = 0.4 * v_progress_max * dt; 
+ds_guess = v_progress_max * dt; 
 
 % Nominal reference used for linearization
 xbar = zeros(nx, N+1); xbar(:,1) = x0;
