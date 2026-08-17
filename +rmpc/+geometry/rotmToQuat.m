@@ -1,0 +1,30 @@
+function q = rotmToQuat(R)
+R = rmpc.geometry.projectSO3(R);
+tr = trace(R);
+if tr > 0
+    s = sqrt(tr + 1.0) * 2;
+    w = 0.25 * s;
+    x = (R(3, 2) - R(2, 3)) / s;
+    y = (R(1, 3) - R(3, 1)) / s;
+    z = (R(2, 1) - R(1, 2)) / s;
+elseif R(1, 1) > R(2, 2) && R(1, 1) > R(3, 3)
+    s = sqrt(1.0 + R(1, 1) - R(2, 2) - R(3, 3)) * 2;
+    w = (R(3, 2) - R(2, 3)) / s;
+    x = 0.25 * s;
+    y = (R(1, 2) + R(2, 1)) / s;
+    z = (R(1, 3) + R(3, 1)) / s;
+elseif R(2, 2) > R(3, 3)
+    s = sqrt(1.0 + R(2, 2) - R(1, 1) - R(3, 3)) * 2;
+    w = (R(1, 3) - R(3, 1)) / s;
+    x = (R(1, 2) + R(2, 1)) / s;
+    y = 0.25 * s;
+    z = (R(2, 3) + R(3, 2)) / s;
+else
+    s = sqrt(1.0 + R(3, 3) - R(1, 1) - R(2, 2)) * 2;
+    w = (R(2, 1) - R(1, 2)) / s;
+    x = (R(1, 3) + R(3, 1)) / s;
+    y = (R(2, 3) + R(3, 2)) / s;
+    z = 0.25 * s;
+end
+q = rmpc.geometry.quatNormalize([w; x; y; z]);
+end

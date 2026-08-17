@@ -1,0 +1,20 @@
+function hist = initHistory(nSteps, disturbance)
+hist.p = zeros(3, nSteps + 1);
+hist.pPre = zeros(3, nSteps + 1);
+hist.q = zeros(4, nSteps + 1);
+hist.qPre = zeros(4, nSteps + 1);
+hist.u = zeros(6, nSteps);
+hist.cost = zeros(1, nSteps);
+hist.diagnostic = zeros(1, nSteps);
+hist.toolAxisAngle = zeros(1, nSteps + 1);
+hist.progress = nan(1, nSteps + 1);
+hist.progressRef = nan(1, nSteps + 1);
+hist.vprogress = zeros(1, nSteps);
+hist.vprogressRef = zeros(1, nSteps);
+hist.completed = false;
+hist.finishStep = NaN;
+hist.finishTime = NaN;
+hist.thetaFinal = NaN;
+hist.completionRatio = 0;
+hist.disturbance = disturbance;
+end
